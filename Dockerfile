@@ -1,16 +1,22 @@
 FROM golang:1.22-alpine AS builder
 
-RUN apk add --no-cache build-base taglib-dev cmake
+# Install required libraries and git
+RUN apk add --no-cache build-base taglib-dev cmake git
 
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download || true
 
-COPY . .
+# 1. Download and build the original beatportdl tool
+RUN git clone https://github.com/unspok3n/beatportdl.git
+WORKDIR /app/beatportdl
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/beatportdl-cli ./cmd/beatportdl
 
-RUN CGO_ENABLED=1 GOOS=linux go build -o beatportdl-cli ./cmd/beatportdl || true
+# 2. Build the web server we wrote
+WORKDIR /app
+COPY server.go .
+RUN go mod init beatport-server
 RUN CGO_ENABLED=1 GOOS=linux go build -o server ./server.go
 
+# 3. Create the final lightweight container
 FROM alpine:latest
 
 RUN apk add --no-cache taglib ca-certificates ffmpeg
