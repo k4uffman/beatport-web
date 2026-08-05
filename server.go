@@ -99,7 +99,16 @@ downloads_directory: downloads
 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"beatport_tracks.zip\"")
-	http.ServeFile(w, r, zipPath)
+	
+	// FIX: Stream the file in chunks instead of loading it all at once to bypass the 32MB limit
+	file, err := os.Open(zipPath)
+	if err != nil {
+		http.Error(w, "Failed to open zip for streaming", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	io.Copy(w, file)
 }
 
 func createZip(sourceDir, targetZip string) error {
