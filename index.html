@@ -62,9 +62,10 @@
                 return;
             }
 
-            // Update UI to show loading state
+            // Lock the UI and show the persistent status bar
             btn.disabled = true;
             btn.classList.add("opacity-50", "cursor-not-allowed");
+            btn.innerText = "Processing... (Refresh page to start a new download)";
             statusBox.classList.remove("hidden");
 
             // Format the URL for a GET request
@@ -74,15 +75,6 @@
             // Because the server sends an "attachment" header, it won't actually leave the page, 
             // it will just trigger your browser's native download manager directly to the hard drive!
             window.location.href = downloadUrl;
-
-            // Reset the button after 10 seconds so the UI doesn't stay permanently locked,
-            // allowing them to queue up another download if they want.
-            setTimeout(() => {
-                btn.disabled = false;
-                btn.classList.remove("opacity-50", "cursor-not-allowed");
-                statusBox.classList.add("hidden");
-                urlInput.value = "";
-            }, 10000);
         }
     </script>
 </body>
