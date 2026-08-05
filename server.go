@@ -47,8 +47,9 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	// Pull secure credentials from Cloud Run
 	username := os.Getenv("BEATPORT_USERNAME")
 	password := os.Getenv("BEATPORT_PASSWORD")
+	credentialsJSON := os.Getenv("BEATPORT_CREDENTIALS")
 
-	// Generate the exact config format beatportdl expects
+	// Generate the exact config format
 	configContent := fmt.Sprintf(`username: %s
 password: %s
 quality: lossless
@@ -57,16 +58,28 @@ track_exists: update
 keep_cover: true
 `, username, password)
 
-	// Write the config file into the working directory
+	// Write the config file
 	err = os.WriteFile(filepath.Join(workDir, "beatportdl-config.yml"), []byte(configContent), 0600)
 	if err != nil {
 		http.Error(w, "Failed to write config file", http.StatusInternalServerError)
 		return
 	}
 
-	// Run the beatportdl CLI
+	// Write the credentials JSON if provided in Cloud Run
+	if credentialsJSON != "" {
+		err = os.WriteFile(filepath.Join(workDir, "beatportdl-credentials.json"), []byte(credentialsJSON), 0600)
+		if err != nil {
+			http.Error(w, "Failed to write credentials file", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	cmd := exec.Command("/app/beatportdl-cli", url)
 	cmd.Dir = workDir
+	
+	// Force the tool to look in the temporary working directory for its config files
+	cmd.Env = append(os.Environ(), "HOME="+workDir, "XDG_CONFIG_HOME="+workDir)
+	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("beatportdl execution failed: %v\nOutput: %s", err, string(output))
@@ -99,12 +112,11 @@ func createZip(sourceDir, targetZip string) error {
 	defer archive.Close()
 
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		// Skip directories
 		if err != nil || info.IsDir() {
 			return nil
 		}
 		
-		// CRITICAL: Do not zip the config or credentials files!
+		// Ensure neither config nor credentials get packed into the final ZIP sent to users
 		if info.Name() == "beatportdl-config.yml" || info.Name() == "beatportdl-credentials.json" {
 			return nil
 		}
