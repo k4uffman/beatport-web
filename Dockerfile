@@ -1,8 +1,8 @@
-# 1. Use the bleeding-edge version of Alpine to get TagLib 2.0+
+# 1. Use the bleeding-edge version of Alpine
 FROM alpine:edge AS builder
 
-# Install Go, Git, and the C++ build tools
-RUN apk add --no-cache go build-base taglib-dev cmake git
+# Install Go, Git, C++ build tools, AND zlib-dev (The missing piece!)
+RUN apk add --no-cache go build-base taglib-dev cmake git zlib-dev
 
 WORKDIR /app
 
@@ -15,13 +15,14 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o /app/beatportdl-cli ./cmd/beatportdl
 WORKDIR /app
 COPY server.go .
 RUN go mod init beatport-server
+RUN go mod tidy
 RUN CGO_ENABLED=1 GOOS=linux go build -o server ./server.go
 
 # 4. Create the final lightweight container
 FROM alpine:edge
 
-# Install the runtime dependencies from the edge repo
-RUN apk add --no-cache taglib ca-certificates ffmpeg
+# Install the runtime dependencies
+RUN apk add --no-cache taglib ca-certificates ffmpeg zlib
 
 WORKDIR /app
 COPY --from=builder /app/beatportdl-cli .
