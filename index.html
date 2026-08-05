@@ -8,30 +8,46 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
     <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+        
         <header class="text-center space-y-1">
             <h1 class="text-2xl font-extrabold text-emerald-400">Beatport Downloader</h1>
-            <p class="text-xs text-slate-400">Paste any Beatport Track, Release, or Playlist link.</p>
+            <p class="text-xs text-slate-400">Grab high-quality audio directly from Beatport.</p>
         </header>
+
+        <!-- NEW: Help Section -->
+        <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 text-sm text-slate-300">
+            <h3 class="font-bold text-emerald-400 mb-2">📖 Supported Links & Features</h3>
+            <ul class="list-disc pl-5 space-y-1 text-xs">
+                <li><strong>Tracks:</strong> Paste a single track link for a quick download.</li>
+                <li><strong>Playlists & Charts:</strong> Paste a playlist/chart link to download all tracks inside it automatically.</li>
+                <li><strong>Releases:</strong> Paste an EP or Album link to grab the full release in one go.</li>
+                <li><strong>Artists & Labels:</strong> Paste an artist or label link to download their entire catalog (Note: This can take a while!).</li>
+            </ul>
+        </div>
+
         <div class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Beatport URL</label>
-                <input type="url" id="urlInput" placeholder="https://www.beatport.com/release/..." 
+                <input type="url" id="urlInput" placeholder="https://www.beatport.com/playlist/..." 
                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
             </div>
+
             <button onclick="triggerDownload()" id="downloadBtn" 
                     class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-lg transition duration-200 shadow-lg shadow-emerald-500/10">
                 Start Download (.ZIP)
             </button>
         </div>
+
         <div id="statusBox" class="hidden text-center p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
             <div class="inline-block animate-spin text-emerald-400 text-xl">⏳</div>
             <p class="text-xs text-slate-300 font-medium" id="statusMessage">Processing link and fetching audio files...</p>
             <p class="text-[10px] text-slate-500">This can take a few minutes for large playlists.</p>
         </div>
+
     </div>
 
     <script>
-        // WE WILL UPDATE THIS URL IN STEP 3
+        // Ensure you paste your Cloud Run URL here!
         const CLOUD_RUN_URL = "https://beatportpub-539330655097.us-central1.run.app/api/download";
 
         async function triggerDownload() {
@@ -41,7 +57,10 @@
             const statusMessage = document.getElementById("statusMessage");
 
             const url = urlInput.value.trim();
-            if (!url) return alert("Please enter a valid Beatport URL.");
+            if (!url) {
+                alert("Please enter a valid Beatport URL.");
+                return;
+            }
 
             btn.disabled = true;
             btn.classList.add("opacity-50", "cursor-not-allowed");
@@ -52,10 +71,17 @@
                 const formData = new FormData();
                 formData.append("url", url);
 
-                const response = await fetch(CLOUD_RUN_URL, { method: "POST", body: formData });
-                if (!response.ok) throw new Error(`Server returned status ${response.status}`);
+                const response = await fetch(CLOUD_RUN_URL, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server returned status ${response.status}`);
+                }
 
                 statusMessage.innerText = "Packaging files into ZIP...";
+                
                 const blob = await response.blob();
                 const blobUrl = window.URL.createObjectURL(blob);
                 
@@ -69,7 +95,8 @@
 
                 statusMessage.innerText = "Download complete!";
             } catch (err) {
-                alert("Download failed. Make sure the URL is valid.");
+                alert("Download failed. Make sure the URL is valid or check server logs.");
+                console.error(err);
             } finally {
                 btn.disabled = false;
                 btn.classList.remove("opacity-50", "cursor-not-allowed");
