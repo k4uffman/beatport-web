@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -41,6 +43,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.RemoveAll(workDir)
+
+	// Securely inject Beatport credentials via a temporary .env file
+	username := os.Getenv("BEATPORT_USERNAME")
+	password := os.Getenv("BEATPORT_PASSWORD")
+	if username != "" && password != "" {
+		envContent := fmt.Sprintf("BEATPORT_USERNAME=%s\nBEATPORT_PASSWORD=%s\n", username, password)
+		os.WriteFile(filepath.Join(workDir, ".env"), []byte(envContent), 0600)
+	}
 
 	cmd := exec.Command("./beatportdl-cli", url)
 	cmd.Dir = workDir
@@ -76,14 +86,17 @@ func createZip(sourceDir, targetZip string) error {
 	defer archive.Close()
 
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return err
+		// Skip directories and the .env file so we NEVER expose your credentials in the ZIP
+		if err != nil || info.IsDir() || info.Name() == ".env" {
+			return nil
 		}
+		
 		relPath, _ := filepath.Rel(sourceDir, path)
 		writer, err := archive.Create(relPath)
 		if err != nil {
 			return err
 		}
+		
 		file, err := os.Open(path)
 		if err != nil {
 			return err
