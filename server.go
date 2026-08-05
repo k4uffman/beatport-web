@@ -59,14 +59,12 @@ keep_cover: true
 downloads_directory: downloads
 `, username, password)
 
-	// Write the config file
 	err = os.WriteFile(filepath.Join(workDir, "beatportdl-config.yml"), []byte(configContent), 0600)
 	if err != nil {
 		http.Error(w, "Failed to write config file", http.StatusInternalServerError)
 		return
 	}
 
-	// Write the credentials JSON if provided in Cloud Run
 	if credentialsJSON != "" {
 		err = os.WriteFile(filepath.Join(workDir, "beatportdl-credentials.json"), []byte(credentialsJSON), 0600)
 		if err != nil {
@@ -77,8 +75,6 @@ downloads_directory: downloads
 
 	cmd := exec.Command("/app/beatportdl-cli", url)
 	cmd.Dir = workDir
-	
-	// Force the tool to look in the temporary working directory for its config files
 	cmd.Env = append(os.Environ(), "HOME="+workDir, "XDG_CONFIG_HOME="+workDir)
 	
 	output, err := cmd.CombinedOutput()
@@ -88,64 +84,47 @@ downloads_directory: downloads
 		return
 	}
 
-	zipPath := filepath.Join(os.TempDir(), "beatport_download.zip")
-	defer os.Remove(zipPath)
-
-	if err := createZip(workDir, zipPath); err != nil {
-		log.Printf("Zip creation failed: %v", err)
-		http.Error(w, "Failed to package files into ZIP", http.StatusInternalServerError)
-		return
-	}
-
+	// Tell the browser to expect a streamed ZIP download
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"beatport_tracks.zip\"")
-	
-	// FIX: Stream the file in chunks instead of loading it all at once to bypass the 32MB limit
-	file, err := os.Open(zipPath)
-	if err != nil {
-		http.Error(w, "Failed to open zip for streaming", http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
 
-	io.Copy(w, file)
-}
+	// Create a zip writer that outputs directly to the HTTP stream
+	archive := zip.NewWriter(w)
 
-func createZip(sourceDir, targetZip string) error {
-	zipFile, err := os.Create(targetZip)
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
-
-	archive := zip.NewWriter(zipFile)
-	defer archive.Close()
-
-	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
+	// Step 1: Collect all files to avoid modifying the directory while walking it
+	var filesToZip []string
+	filepath.Walk(workDir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && info.Name() != "beatportdl-config.yml" && info.Name() != "beatportdl-credentials.json" {
+			filesToZip = append(filesToZip, path)
 		}
+		return nil
+	})
+
+	// Step 2: Stream each file and immediately delete it to free RAM
+	for _, path := range filesToZip {
+		relPath, _ := filepath.Rel(workDir, path)
 		
-		// Ensure neither config nor credentials get packed into the final ZIP sent to users
-		if info.Name() == "beatportdl-config.yml" || info.Name() == "beatportdl-credentials.json" {
-			return nil
-		}
-		
-		relPath, _ := filepath.Rel(sourceDir, path)
 		writer, err := archive.Create(relPath)
 		if err != nil {
-			return err
+			continue
 		}
 		
 		file, err := os.Open(path)
 		if err != nil {
-			return err
+			continue
 		}
-		defer file.Close()
+		
+		// Copy file data to the stream
+		io.Copy(writer, file)
+		file.Close()
 
-		_, err = io.Copy(writer, file)
-		return err
-	})
+		// THE MAGIC: Aggressive Garbage Collection
+		// Instantly delete the raw FLAC from RAM now that it's streaming
+		os.Remove(path) 
+	}
+
+	// Finalize the zip stream
+	archive.Close()
 }
 
 func main() {
