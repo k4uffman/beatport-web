@@ -52,7 +52,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		os.WriteFile(filepath.Join(workDir, ".env"), []byte(envContent), 0600)
 	}
 
-	cmd := exec.Command("./beatportdl-cli", url)
+	cmd := exec.Command("/app/beatportdl-cli", url)
 	cmd.Dir = workDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
