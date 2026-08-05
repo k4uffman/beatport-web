@@ -49,13 +49,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	password := os.Getenv("BEATPORT_PASSWORD")
 	credentialsJSON := os.Getenv("BEATPORT_CREDENTIALS")
 
-	// Generate the exact config format
+	// Generate the exact config format with the required downloads_directory
 	configContent := fmt.Sprintf(`username: %s
 password: %s
 quality: lossless
 key_system: camelot
 track_exists: update
 keep_cover: true
+downloads_directory: downloads
 `, username, password)
 
 	// Write the config file
