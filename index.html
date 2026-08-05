@@ -14,7 +14,7 @@
             <p class="text-xs text-slate-400">Grab high-quality audio directly from Beatport.</p>
         </header>
 
-        <!-- NEW: Help Section -->
+        <!-- Help Section -->
         <div class="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 text-sm text-slate-300">
             <h3 class="font-bold text-emerald-400 mb-2">📖 Supported Links & Features</h3>
             <ul class="list-disc pl-5 space-y-1 text-xs">
@@ -40,17 +40,17 @@
 
         <div id="statusBox" class="hidden text-center p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
             <div class="inline-block animate-spin text-emerald-400 text-xl">⏳</div>
-            <p class="text-xs text-slate-300 font-medium" id="statusMessage">Processing link and fetching audio files...</p>
-            <p class="text-[10px] text-slate-500">This can take a few minutes for large playlists.</p>
+            <p class="text-xs text-slate-300 font-medium" id="statusMessage">Processing link... (This page will hang while Beatport downloads tracks to the server. Your download will start automatically when ready!)</p>
+            <p class="text-[10px] text-slate-500">Massive playlists may take 5-10 minutes to compile.</p>
         </div>
 
     </div>
 
     <script>
-        // Ensure you paste your Cloud Run URL here!
+        // Your exact Cloud Run endpoint
         const CLOUD_RUN_URL = "https://beatportpub-539330655097.us-central1.run.app/api/download";
 
-        async function triggerDownload() {
+        function triggerDownload() {
             const urlInput = document.getElementById("urlInput");
             const btn = document.getElementById("downloadBtn");
             const statusBox = document.getElementById("statusBox");
@@ -62,46 +62,27 @@
                 return;
             }
 
+            // Update UI to show loading state
             btn.disabled = true;
             btn.classList.add("opacity-50", "cursor-not-allowed");
             statusBox.classList.remove("hidden");
-            statusMessage.innerText = "Downloading tracks and embedding metadata...";
 
-            try {
-                const formData = new FormData();
-                formData.append("url", url);
+            // Format the URL for a GET request
+            const downloadUrl = `${CLOUD_RUN_URL}?url=${encodeURIComponent(url)}`;
+            
+            // Navigate the browser directly to the stream. 
+            // Because the server sends an "attachment" header, it won't actually leave the page, 
+            // it will just trigger your browser's native download manager directly to the hard drive!
+            window.location.href = downloadUrl;
 
-                const response = await fetch(CLOUD_RUN_URL, {
-                    method: "POST",
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Server returned status ${response.status}`);
-                }
-
-                statusMessage.innerText = "Packaging files into ZIP...";
-                
-                const blob = await response.blob();
-                const blobUrl = window.URL.createObjectURL(blob);
-                
-                const a = document.createElement("a");
-                a.href = blobUrl;
-                a.download = "beatport_download.zip";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(blobUrl);
-
-                statusMessage.innerText = "Download complete!";
-            } catch (err) {
-                alert("Download failed. Make sure the URL is valid or check server logs.");
-                console.error(err);
-            } finally {
+            // Reset the button after 10 seconds so the UI doesn't stay permanently locked,
+            // allowing them to queue up another download if they want.
+            setTimeout(() => {
                 btn.disabled = false;
                 btn.classList.remove("opacity-50", "cursor-not-allowed");
-                setTimeout(() => statusBox.classList.add("hidden"), 3000);
-            }
+                statusBox.classList.add("hidden");
+                urlInput.value = "";
+            }, 10000);
         }
     </script>
 </body>
